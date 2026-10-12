@@ -1,0 +1,249 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#176b45">
+<title>Apni Dukaan Stock</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{font-family:system-ui,sans-serif;color:#183329;background:#f4f7f5}
+*{box-sizing:border-box}body{margin:0}header{background:#176b45;color:white;padding:18px}
+main{max-width:850px;margin:auto;padding:16px}
+h1{font-size:22px;margin:0}h2{font-size:18px}
+.card{background:white;border:1px solid #e0e8e2;border-radius:16px;padding:16px;margin:12px 0}
+input,button,select{font:inherit;padding:12px;border-radius:10px;width:100%;margin:5px 0}
+input,select{border:1px solid #ccd8cf;background:white;color:#183329}
+button{border:0;background:#176b45;color:white;font-weight:650;cursor:pointer}
+button.secondary{background:#e7f1ea;color:#176b45}
+button.danger{background:#a72e2e}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.stats{background:#e4f3e8;padding:12px;border-radius:12px}
+.products{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.product{background:white;border:1px solid #e0e8e2;border-radius:14px;padding:10px;min-width:0}
+.product img{width:100%;height:130px;object-fit:cover;border-radius:10px;background:#edf2ee}
+.muted{color:#64766b;font-size:13px}.low{color:#a65a00;font-weight:700}.out{color:#b42318;font-weight:700}
+.row{display:flex;gap:8px}.row>*{flex:1;min-width:0}
+.hidden{display:none!important}
+@media(min-width:600px){.products{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media print{header button,.no-print{display:none!important}body{background:white}}
+</style>
+</head>
+<body>
+<header>
+  <div style="max-width:850px;margin:auto;display:flex;justify-content:space-between;align-items:center;gap:12px">
+    <div><h1>Apni Dukaan Stock</h1><small>Electrical Inventory · Stock Management</small></div>
+    <button id="logout" class="secondary hidden" style="width:auto">Logout</button>
+  </div>
+</header>
+<main>
+  <section id="setup" class="card">
+    <h2>App setup / सेटअप</h2>
+    <p class="muted">Supabase Project URL aur Publishable key daalein.</p>
+    <input id="url" placeholder="https://your-project.supabase.co">
+    <input id="key" placeholder="sb_publishable_..." autocomplete="off">
+    <button id="connect">Connect / जोड़ें</button>
+    <p class="muted">Sirf publishable key use karein. Secret ya service-role key kabhi yahan mat daalein.</p>
+  </section>
+
+  <section id="auth" class="card hidden">
+    <h2>Login / लॉगिन</h2>
+    <input id="email" type="email" placeholder="Email address">
+    <input id="password" type="password" placeholder="Password (minimum 8 characters)">
+    <div class="row">
+      <button id="signin">Login</button>
+      <button id="signup" class="secondary">Create account</button>
+    </div>
+    <p id="authmsg" class="muted">Har user ki apni ID hogi.</p>
+  </section>
+
+  <section id="app" class="hidden">
+    <div class="card">
+      <div class="row" style="align-items:center">
+        <div><h2>Namaste! 👋</h2><div id="shopname" class="muted">Your shop</div></div>
+        <button id="refresh" style="max-width:120px">Refresh ↻</button>
+      </div>
+      <div class="grid">
+        <div class="stats"><div class="muted">Products / सामान</div><strong id="total">0</strong></div>
+        <div class="stats"><div class="muted">Units / कुल मात्रा</div><strong id="units">0</strong></div>
+        <div class="stats"><div class="muted">Low stock / कम स्टॉक</div><strong id="low">0</strong></div>
+        <div class="stats"><div class="muted">Stock value / खरीद मूल्य</div><strong id="value">₹0</strong></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Add product / नया सामान</h2>
+      <form id="productform">
+        <label>Photo / फोटो</label>
+        <input id="photo" type="file" accept="image/*" capture="environment">
+        <label>Product name / सामान का नाम *</label>
+        <input id="name" required placeholder="e.g. MCB 16A">
+        <label>Code or model (optional)</label>
+        <input id="code" placeholder="Optional">
+        <div class="row">
+          <div><label>Purchase ₹</label><input id="purchase" type="number" min="0" step=".01" required value="0"></div>
+          <div><label>Sale ₹</label><input id="sale" type="number" min="0" step=".01" required value="0"></div>
+        </div>
+        <div class="row">
+          <div><label>Opening qty</label><input id="qty" type="number" min="0" step="1" required value="0"></div>
+          <div><label>Low-stock limit</label><input id="minqty" type="number" min="0" step="1" value="2"></div>
+        </div>
+        <label>Expiry date (if applicable)</label>
+        <input id="expiry" type="date">
+        <button type="submit">Save product / सामान सेव करें</button>
+      </form>
+      <p class="muted">Har item ki photo, naam aur prices save honge. Code optional hai.</p>
+    </div>
+
+    <div class="card">
+      <h2>Stock / सामान खोजें</h2>
+      <input id="search" placeholder="Search name or code / नाम खोजें">
+      <div class="row no-print">
+        <button id="csv" class="secondary">Download Excel CSV</button>
+        <button id="pdf" class="secondary">Print / Save PDF</button>
+      </div>
+      <div id="products" class="products"></div>
+    </div>
+
+    <div class="card">
+      <h2>Recent stock history / हाल का रिकॉर्ड</h2>
+      <div id="history" class="muted">Loading…</div>
+    </div>
+    <p class="muted">Prices and stock are shop records. Verify before billing or ordering.</p>
+  </section>
+</main>
+
+<script>
+let db=null, user=null, shopId=null, items=[], photoUrls={};
+const $=id=>document.getElementById(id);
+const money=n=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:2}).format(Number(n)||0);
+function msg(s){$('authmsg').textContent=s}
+function show(id,on){$(id).classList.toggle('hidden',!on)}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function fail(e){alert(e?.message||String(e))}
+$('connect').onclick=()=>{
+ const u=$('url').value.trim(),k=$('key').value.trim();
+ if(!u.startsWith('https://')||!k){alert('Project URL aur publishable key bharein.');return}
+ db=window.supabase.createClient(u,k);
+ localStorage.setItem('ads_url',u);localStorage.setItem('ads_key',k);
+ show('setup',false);show('auth',true);resume();
+};
+$('url').value=localStorage.getItem('ads_url')||'';
+$('key').value=localStorage.getItem('ads_key')||'';
+if($('url').value&&$('key').value){db=window.supabase.createClient($('url').value,$('key').value);show('setup',false);show('auth',true)}
+async function resume(){
+ if(!db)return;
+ const {data:{session}}=await db.auth.getSession();
+ if(session){user=session.user;await enterApp()}
+}
+$('signin').onclick=async()=>{
+ if(!db)return alert('Pehle setup karein.');
+ const {error}=await db.auth.signInWithPassword({email:$('email').value,password:$('password').value});
+ if(error)return msg(error.message);
+ await resume();
+};
+$('signup').onclick=async()=>{
+ if(!db)return alert('Pehle setup karein.');
+ if($('password').value.length<8)return msg('Password kam se kam 8 characters ka rakhein.');
+ const {error}=await db.auth.signUp({email:$('email').value,password:$('password').value});
+ msg(error?error.message:'Account request submitted. Email confirmation required ho sakta hai. Account banne ke baad login karein.');
+};
+$('logout').onclick=async()=>{await db.auth.signOut();user=null;show('app',false);show('auth',true);show('logout',false)};
+async function enterApp(){
+ show('auth',false);show('app',true);show('logout',true);
+ const {data,error}=await db.from('shop_members').select('shop_id,role').eq('user_id',user.id).limit(1);
+ if(error)return fail(error);
+ if(!data?.length){$('shopname').textContent='Shop membership pending. Owner ko setup steps follow karne honge.';return}
+ shopId=data[0].shop_id;
+ const {data:shop}=await db.from('shops').select('name').eq('id',shopId).single();
+ $('shopname').textContent=(shop?.name||'Apni Dukaan')+' · '+user.email;
+ await load();
+}
+async function signedPhoto(path){
+ if(!path)return '';
+ if(photoUrls[path])return photoUrls[path];
+ const {data,error}=await db.storage.from('product-photos').createSignedUrl(path,3600);
+ if(error)return '';
+ photoUrls[path]=data.signedUrl;return data.signedUrl;
+}
+async function load(){
+ if(!shopId)return;
+ const {data,error}=await db.from('products').select('*').eq('shop_id',shopId).order('name');
+ if(error)return fail(error);
+ items=data||[];
+ for(const p of items)if(p.photo_path)await signedPhoto(p.photo_path);
+ $('total').textContent=items.length;
+ $('units').textContent=items.reduce((s,p)=>s+Number(p.quantity),0);
+ $('low').textContent=items.filter(p=>p.quantity<=p.min_quantity).length;
+ $('value').textContent=money(items.reduce((s,p)=>s+Number(p.quantity)*Number(p.purchase_price),0));
+ render();
+ const {data:m,error:me}=await db.from('stock_movements').select('id,product_id,movement_type,quantity,unit_price,note,created_at').eq('shop_id',shopId).order('created_at',{ascending:false}).limit(15);
+ if(me){$('history').textContent=me.message;return}
+ $('history').innerHTML=(m||[]).map(x=>{
+ const p=items.find(p=>p.id===x.product_id);
+ return `<div style="padding:8px 0;border-bottom:1px solid #eee"><b>${esc(p?.name||'Product')}</b> · ${x.movement_type==='IN'?'Stock aaya +':'Stock gaya −'}${x.quantity}<br><span class="muted">${new Date(x.created_at).toLocaleString('en-IN')} · ${money(x.unit_price)} · ${esc(x.note||'')}</span></div>`;
+ }).join('')||'No stock history yet.';
+}
+function render(){
+ const q=$('search').value.toLowerCase();
+ $('products').innerHTML=items.filter(p=>(p.name+' '+(p.code||'')).toLowerCase().includes(q)).map(p=>{
+ const low=Number(p.quantity)<=Number(p.min_quantity),zero=Number(p.quantity)===0;
+ const expiry=p.expiry_date?`<div class="muted">Expiry: ${esc(p.expiry_date)}</div>`:'';
+ return `<article class="product">
+ ${p.photo_path&&photoUrls[p.photo_path]?`<img src="${photoUrls[p.photo_path]}" alt="">`:`<div style="height:130px;background:#edf2ee;border-radius:10px;display:grid;place-items:center">📦</div>`}
+ <b>${esc(p.name)}</b><div class="muted">${esc(p.code||'No code')}</div>
+ <div style="font-size:20px;font-weight:750;margin-top:8px">${p.quantity} pcs</div>
+ <div class="${zero?'out':low?'low':''}">${zero?'OUT OF STOCK':low?'LOW STOCK':'In stock'}</div>
+ <div class="muted">Purchase ${money(p.purchase_price)}</div>
+ <div class="muted">Sale ${money(p.sale_price)}</div>${expiry}
+ <button onclick="move('${p.id}','IN')">+ Stock In</button>
+ <button class="secondary" onclick="move('${p.id}','OUT')">− Stock Out</button>
+ </article>`;
+ }).join('')||'<p class="muted">Product nahi mila.</p>';
+}
+$('productform').onsubmit=async e=>{
+ e.preventDefault();if(!shopId)return alert('Shop membership setup pending.');
+ const file=$('photo').files[0],id=crypto.randomUUID();let path=null;
+ try{
+ if(file){
+  if(!file.type.startsWith('image/'))throw Error('Image file select karein.');
+  if(file.size>5*1024*1024)throw Error('Photo 5 MB se chhoti honi chahiye.');
+  path=shopId+'/'+id+'.'+(file.type.split('/')[1]||'jpg').replace('jpeg','jpg');
+  const {error}=await db.storage.from('product-photos').upload(path,file,{contentType:file.type,upsert:false});
+  if(error)throw error;
+ }
+ const p={id,shop_id:shopId,name:$('name').value.trim(),code:$('code').value.trim()||null,category:'Electrical',photo_path:path,purchase_price:Number($('purchase').value),sale_price:Number($('sale').value),quantity:Number($('qty').value),min_quantity:Number($('minqty').value),expiry_date:$('expiry').value||null};
+ const {error}=await db.from('products').insert(p);if(error)throw error;
+ if(p.quantity>0){
+  const {error:me}=await db.from('stock_movements').insert({shop_id:shopId,product_id:id,user_id:user.id,movement_type:'IN',quantity:p.quantity,unit_price:p.purchase_price,note:'Opening stock'});
+  if(me)alert('Product saved; opening history needs correction: '+me.message);
+ }
+ e.target.reset();$('purchase').value=0;$('sale').value=0;$('qty').value=0;$('minqty').value=2;
+ await load();alert('Product saved / सामान सेव हो गया');
+ }catch(err){fail(err)}
+};
+window.move=async(id,type)=>{
+ const p=items.find(x=>x.id===id);if(!p)return;
+ const q=Number(prompt((type==='IN'?'Kitna maal aaya?':'Kitna maal nikla?')+' Quantity:', '1'));
+ if(!Number.isInteger(q)||q<=0)return;
+ if(type==='OUT'&&q>Number(p.quantity))return alert('Available stock se zyada nahi nikaal sakte.');
+ const price=Number(prompt('Per-piece '+(type==='IN'?'purchase':'sale')+' price ₹:',type==='IN'?p.purchase_price:p.sale_price));
+ if(!Number.isFinite(price)||price<0)return alert('Price sahi daalein.');
+ const note=prompt('Note (optional):','')||'';
+ const {error}=await db.rpc('apply_stock_movement',{sid:shopId,pid:id,typ:type,qty:q,price,note_text:note});
+ if(error)return fail(error);
+ await load();
+};
+$('search').oninput=render;$('refresh').onclick=load;
+$('csv').onclick=()=>{
+ const rows=[['Name','Code','Quantity','Purchase Price','Sale Price','Stock Cost Value','Expiry']];
+ for(const p of items)rows.push([p.name,p.code||'',p.quantity,p.purchase_price,p.sale_price,Number(p.quantity)*Number(p.purchase_price),p.expiry_date||'']);
+ const csv='\uFEFF'+rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));a.download='apni-dukaan-stock.csv';a.click();URL.revokeObjectURL(a.href);
+};
+$('pdf').onclick=()=>window.print();
+if(db)resume();
+</script>
+</body>
+</html>
